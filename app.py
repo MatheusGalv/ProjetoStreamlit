@@ -7,27 +7,27 @@ st.markdown(
     """
     <style>
     h1 {
-        
         color: #ffffff;
+        text-align: center;
     }
     h2, h3, h4, h5, h6 {
         color: #ffffff;
     }
     .stSidebar {
-        background-color: #1a1a1a; /* Cor de fundo da div específica */
-        }
+        background-color: #1a1a1a;
+    }
     </style>
     """,
     unsafe_allow_html=True
 )
 
-st.title("Meu Aplicativo")
+st.title("DashBoard PPGHIS (Professores)")
 st.sidebar.header("Menu Lateral")
 st.sidebar.write("Aqui estão alguns filtros e opções.")
 
 # Lista de nomes para filtrar
 nomes_para_filtrar = [
-    "Andréa Casa Nova Maia", "Andrea Daher", "Antonio Carlos Jucá de Sampaio", 
+    "Todos", "Andréa Casa Nova Maia", "Andrea Daher", "Antonio Carlos Jucá de Sampaio", 
     "Beatriz Catão Cruz Santos", "Carlos Ziller Camenietzki", "Cláudio Costa Pinheiro", 
     "Deivid Valério Gaia", "Felipe Charbel Teixeira", "Fernando Luiz Vale Castro", 
     "Flávio dos Santos Gomes", "Gabriel de Carvalho Godoy Castanho", "Hanna Sonkajärvi", 
@@ -43,87 +43,61 @@ nomes_para_filtrar = [
     "Vinícius Aurélio Liebel", "Vitor Izecksohn", "William de Souza Martins"
 ]
 
-# Adicionar a opção "Todos"
-nomes_para_filtrar = ["Todos"] + nomes_para_filtrar
-
+# Anos para filtrar
 anos_para_filtrar = ["Todos", "2021", "2022", "2023", "2024"]
 
-# Carregar os arquivos Excel usando pd.ExcelFile
-excel_producao_bibliografica = pd.ExcelFile("data/Producao_Bibliografica.xlsx")
-excel_producao_tecnica = pd.ExcelFile("data/Producao_tecnica.xlsx")
-excel_producao_cultural = pd.ExcelFile("data/Producao_cultural.xlsx")
-excel_bancas = pd.ExcelFile("data/Bancas.xlsx")
-excel_eventos = pd.ExcelFile("data/Eventos.xlsx")
-excel_orientacoes = pd.ExcelFile("data/orientações.xlsx")
-
-# Dicionário para mapear os arquivos com suas sheets
+# Carregar os arquivos Excel
 excel_files = {
-    "Produção Bibliográfica": excel_producao_bibliografica,
-    "Produção Técnica": excel_producao_tecnica,
-    "Produção Cultural": excel_producao_cultural,
-    "Bancas": excel_bancas,
-    "Eventos": excel_eventos,
-    "Orientações": excel_orientacoes
+    "Produção Bibliográfica": pd.ExcelFile("data/Producao_Bibliografica.xlsx"),
+    "Produção Técnica": pd.ExcelFile("data/Producao_tecnica.xlsx"),
+    "Produção Cultural": pd.ExcelFile("data/Producao_cultural.xlsx"),
+    "Bancas": pd.ExcelFile("data/Bancas.xlsx"),
+    "Eventos": pd.ExcelFile("data/Eventos.xlsx"),
+    "Orientações": pd.ExcelFile("data/orientações.xlsx")
 }
 
-# Carregar todos os DataFrames de todas as sheets
-# Carregar os DataFrames de cada arquivo e sheet
-# Carregar os DataFrames de cada arquivo e sheet
+# Processar os DataFrames
 dataframes = {}
 for file_name, excel_file in excel_files.items():
-    dataframes[file_name] = {}
-    for sheet_name in excel_file.sheet_names:
-        df = excel_file.parse(sheet_name)
-        # Converter a coluna 'Ano' para string, se existir
-        if 'Ano' in df.columns:
-            df['Ano'] = df['Ano'].astype(str)
-        dataframes[file_name][sheet_name] = df
+    dataframes[file_name] = {sheet: excel_file.parse(sheet) for sheet in excel_file.sheet_names}
 
-# Criar os filtros na barra lateral
-with st.sidebar:
-    nomes_selecionados = st.multiselect("Selecione o(s) Nome(s) para filtrar", options=nomes_para_filtrar)
+# Função para filtrar e contar as linhas
+def contar_linhas(df, nomes, anos):
+    if "Todos" not in nomes:
+        df = df[df['Nome Completo'].isin(nomes)]
+    if "Todos" not in anos:
+        df = df[df['Ano'].isin(anos)]
+    return len(df)
 
-    arquivos_disponiveis = ["Todos"] + list(excel_files.keys())
-    arquivos_selecionados = st.multiselect(
-        "Selecione o(s) Arquivo(s) para filtrar",
-        options=arquivos_disponiveis
-        #default=list(excel_files.keys())  # Seleciona todos por padrão
-    )
-    
-    # Filtro de sheets com base nos arquivos selecionados
-    sheets_disponiveis = []
-    for arquivo in arquivos_selecionados:
-        sheets_disponiveis.extend(dataframes[arquivo].keys())
-    sheets_disponiveis = ["Todos"] + sheets_disponiveis  # Adiciona a opção "Todos" no início
-    
-    sheets_selecionadas = st.multiselect(
-        "Selecione a(s) Sheets para filtrar", 
-        options=sheets_disponiveis
-    )
-    
-    anos_selecionados = st.multiselect(
-        "Selecione os anos para filtrar", 
-        options=anos_para_filtrar, 
-        default="Todos"
-    )
+# Interface do usuário
+nomes_selecionados = st.sidebar.multiselect("Selecione os Nomes", options=nomes_para_filtrar, default="Todos")
+anos_selecionados = st.sidebar.multiselect("Selecione os Anos", options=anos_para_filtrar, default="Todos")
 
-# Filtrar os DataFrames com base nos nomes, arquivos, anos e sheets selecionados
-dados_filtrados = {}
-for file_name, sheets in dataframes.items():
-    if file_name in arquivos_selecionados:  # Filtra pelos arquivos selecionados
-        dados_filtrados[file_name] = {}
-        for sheet_name, df in sheets.items():
-            # Verifica se a opção "Todos" está selecionada ou se a sheet está na lista de selecionadas
-            if "Todos" in sheets_selecionadas or sheet_name in sheets_selecionadas:
-                # Filtrar pelo nome
-                if nomes_selecionados and "Todos" not in nomes_selecionados:
-                    df = df[df['Nome Completo'].isin(nomes_selecionados)]
-                
-                # Filtrar pelo ano
-                if 'Ano' in df.columns and anos_selecionados and "Todos" not in anos_selecionados:
-                    df = df[df['Ano'].isin(anos_selecionados)]
-                
-                dados_filtrados[file_name][sheet_name] = df
+# Filtrar os dados
+contagens = {arquivo: sum(contar_linhas(df, nomes_selecionados, anos_selecionados) for df in sheets.values()) for arquivo, sheets in dataframes.items()}
+
+# Exibir o gráfico de pizza
+fig_pie = px.pie(names=list(contagens.keys()), values=list(contagens.values()), title="Distribuição por Categoria")
+st.plotly_chart(fig_pie)
+
+# Filtrar os anos selecionados
+if "Todos" in anos_selecionados or not anos_selecionados:
+    anos_filtrados = ["2021", "2022", "2023", "2024"]
+else:
+    anos_filtrados = anos_selecionados
+
+# Contagem de linhas por ano filtrado
+contagens_por_ano = {ano: 0 for ano in anos_filtrados}
+for sheets in dataframes.values():
+    for df in sheets.values():
+        for ano in contagens_por_ano.keys():
+            contagens_por_ano[ano] += len(df[df['Ano'] == int(ano)])
+
+# Gráfico de barras atualizado com os anos filtrados
+fig_bar = px.bar(x=list(contagens_por_ano.keys()), y=list(contagens_por_ano.values()), title="Total por Ano")
+st.plotly_chart(fig_bar)
+
+
 
 
 

@@ -8,6 +8,7 @@ st.markdown(
     <style>
     h1 {
         color: #ffffff;
+        text-align: center;
     }
     h2, h3, h4, h5, h6 {
         color: #ffffff;
@@ -20,8 +21,8 @@ st.markdown(
     unsafe_allow_html=True
 )
 
-st.title("Meu Aplicativo")
-st.sidebar.header("Menu Lateral")
+st.title("DashBoard PPGHIS (Professores)")
+st.sidebar.header("Menu de Filtragem: ")
 st.sidebar.write("Aqui estão alguns filtros e opções.")
 
 # Lista de nomes para filtrar
@@ -77,66 +78,183 @@ for file_name, excel_file in excel_files.items():
 
 # Criar os filtros na barra lateral
 with st.sidebar:
-    nomes_selecionados = st.multiselect("Selecione o(s) Nome(s) para filtrar", options=nomes_para_filtrar, default="Todos")
+    nomes_selecionados = st.multiselect("Selecione o(s) Nome(s) para filtrar", options=nomes_para_filtrar)
 
     arquivos_disponiveis = ["Todos"] + list(excel_files.keys())
     arquivos_selecionados = st.multiselect(
         "Selecione o(s) Arquivo(s) para filtrar",
-        options=arquivos_disponiveis,
-        default="Todos"
+        options=arquivos_disponiveis
     )
-    
+
+    # Se nenhum arquivo for selecionado, considera como "Todos"
+    if not arquivos_selecionados or "Todos" in arquivos_selecionados:
+        arquivos_selecionados = list(excel_files.keys())
+
     sheets_disponiveis = []
     for arquivo in arquivos_selecionados:
-        if arquivo != "Todos":
-            sheets_disponiveis.extend(dataframes[arquivo].keys())
-        else:
-            for all_sheets in dataframes.values():
-                sheets_disponiveis.extend(all_sheets.keys())
-    sheets_disponiveis = ["Todos"] + sheets_disponiveis
-    
+        sheets_disponiveis.extend(dataframes[arquivo].keys())
+
+    sheets_disponiveis = ["Todos"] + list(set(sheets_disponiveis))  # Remover duplicatas
+
     sheets_selecionadas = st.multiselect(
         "Selecione a(s) Sheets para filtrar", 
-        options=sheets_disponiveis,
-        default="Todos"
+        options=sheets_disponiveis
     )
+
+    # Se nenhuma sheet for selecionada, considera como "Todos"
+    if not sheets_selecionadas or "Todos" in sheets_selecionadas:
+        sheets_selecionadas = list(set(sheets_disponiveis[1:]))
     
     anos_selecionados = st.multiselect(
         "Selecione os anos para filtrar", 
-        options=anos_para_filtrar, 
-        default="Todos"
+        options=anos_para_filtrar
     )
 
-# Função para contar as linhas de acordo com os filtros
+st.subheader("Distribuição por Categoria: ")
+
+# Função para contar as linhas de acordo com os filtros de forma dinâmica
 def contar_linhas(df, nomes_selecionados, anos_selecionados):
-    if "Todos" not in nomes_selecionados:
+    # Aplicar filtro de nomes apenas se não for vazio
+    if nomes_selecionados:
         df = df[df['Nome Completo'].isin(nomes_selecionados)]
-    if "Todos" not in anos_selecionados:
+    # Aplicar filtro de anos apenas se não for vazio
+    if anos_selecionados:
         df = df[df['Ano'].isin(anos_selecionados)]
     return len(df)
 
-# Contagem das linhas para o gráfico
-contagens = {}
-for arquivo in arquivos_selecionados:
-    if arquivo == "Todos":
-        for nome_arquivo, sheets in dataframes.items():
-            total_linhas = 0
-            for sheet, df in sheets.items():
-                total_linhas += contar_linhas(df, nomes_selecionados, anos_selecionados)
-            contagens[nome_arquivo] = total_linhas
-    else:
-        total_linhas = 0
-        for sheet, df in dataframes[arquivo].items():
-            total_linhas += contar_linhas(df, nomes_selecionados, anos_selecionados)
-        contagens[arquivo] = total_linhas
+# Inicializar dicionário para contagens e definir arquivos e sheets a contar
+arquivos_para_contar = list(excel_files.keys()) if "Todos" in arquivos_selecionados or not arquivos_selecionados else arquivos_selecionados
+sheets_para_contar = None if "Todos" in sheets_selecionadas or not sheets_selecionadas else sheets_selecionadas
+cores = ['#FF5733', '#33FF57', '#3357FF'] 
 
-# Exibir o gráfico de pizza
+contagens = {}
+total_contagens = 0  # Para armazenar o total geral
+
+# Realizar contagem com base nos filtros aplicados
+for arquivo in arquivos_para_contar:
+    total_linhas = 0
+    sheets = dataframes[arquivo]
+    for sheet, df in sheets.items():
+        # Verifica se deve filtrar as sheets ou contar todas
+        if not sheets_para_contar or sheet in sheets_para_contar:
+            linhas_contadas = contar_linhas(df, nomes_selecionados, anos_selecionados)
+            total_linhas += linhas_contadas
+            total_contagens += linhas_contadas  # Acumula no total geral
+    contagens[arquivo] = total_linhas
+
+# Exibir o gráfico de pizza atualizado
 fig = px.pie(
     names=list(contagens.keys()), 
-    values=list(contagens.values()), 
-    title="Distribuição por Categoria"
+    values=list(contagens.values()),
+    color_discrete_sequence=cores
 )
 st.plotly_chart(fig)
+
+# Exibir o total de linhas no centro do layout
+st.markdown(
+    f"<h2 style='text-align: center; color: white;'>O Total é: {total_contagens}</h2>",
+    unsafe_allow_html=True
+)
+
+
+st.subheader("Total por ANO: ")
+
+
+# Filtrar os anos selecionados
+if "Todos" in anos_selecionados or not anos_selecionados:
+    anos_filtrados = ["2021", "2022", "2023", "2024"]
+else:
+    anos_filtrados = anos_selecionados
+
+# Filtrar os nomes selecionados
+if "Todos" in nomes_selecionados or not nomes_selecionados:
+    nomes_filtrados = nomes_para_filtrar[1:]  # Exclui "Todos" para contagem real
+else:
+    nomes_filtrados = nomes_selecionados
+
+# Filtrar os arquivos selecionados
+if "Todos" in arquivos_selecionados or not arquivos_selecionados:
+    arquivos_filtrados = list(dataframes.keys())
+else:
+    arquivos_filtrados = arquivos_selecionados
+
+# Filtrar as sheets selecionadas
+sheets_filtradas = []
+if "Todos" in sheets_selecionadas or not sheets_selecionadas:
+    sheets_filtradas = None  # Marca para incluir todas as sheets dentro dos arquivos filtrados
+else:
+    sheets_filtradas = sheets_selecionadas
+
+# Contagem de linhas por ano, nome, arquivo e sheet selecionados
+contagens_por_ano = {ano: 0 for ano in anos_filtrados}
+for arquivo, sheets in dataframes.items():
+    if arquivo in arquivos_filtrados:  # Aplica filtro de arquivos
+        for sheet, df in sheets.items():
+            # Aplica o filtro de sheets, se não for "Todos"
+            if sheets_filtradas is None or sheet in sheets_filtradas:
+                # Aplica os filtros de ano e nome no DataFrame e conta as linhas correspondentes
+                for ano in contagens_por_ano.keys():
+                    if "Ano" in df.columns and "Nome Completo" in df.columns:
+                        # Filtra o DataFrame usando todos os critérios
+                        contagens_por_ano[ano] += len(df[(df['Ano'] == ano) & (df['Nome Completo'].isin(nomes_filtrados))])
+
+
+
+# Gráfico de barras atualizado com todos os filtros
+fig_bar = px.bar(
+    x=list(contagens_por_ano.keys()),
+    y=list(contagens_por_ano.values())
+)
+
+# Define o eixo x como categórico
+fig_bar.update_xaxes(type='category')
+
+# Adiciona os rótulos de dados nas barras
+fig_bar.update_traces(text=list(contagens_por_ano.values()), textposition='outside')
+
+# Exibir o gráfico no Streamlit
+st.plotly_chart(fig_bar)
+
+# Exibir a tabela da primeira sheet selecionada, se houver
+if sheets_selecionadas:
+    sheet_selecionada = sheets_selecionadas[0]  # Pega apenas a primeira sheet selecionada
+    for arquivo in arquivos_selecionados:
+        if sheet_selecionada in dataframes[arquivo]:
+            df_sheet = dataframes[arquivo][sheet_selecionada]
+
+            # Aplicar filtros de nome e ano, se selecionados
+            if nomes_selecionados and "Todos" not in nomes_selecionados:
+                df_sheet = df_sheet[df_sheet['Nome Completo'].isin(nomes_selecionados)]
+            if anos_selecionados and "Todos" not in anos_selecionados:
+                df_sheet = df_sheet[df_sheet['Ano'].isin(anos_selecionados)]
+
+            # Ordenar pela coluna "Ano" se ela estiver presente
+            if 'Ano' in df_sheet.columns:
+                df_sheet = df_sheet.sort_values(by='Ano', ascending=True)
+
+            # Exibir a tabela no Streamlit com barra de rolagem
+            st.subheader(f"Tabela de Dados: {sheet_selecionada} - {arquivo}")
+
+            # Gerar HTML da tabela e aplicar estilo
+            tabela_html = df_sheet.to_html(index=False)  # Converte DataFrame para HTML sem índice
+            st.markdown(
+                f"""
+                <div style="overflow-x: auto;">
+                    {tabela_html}
+                </div>
+                """,
+                unsafe_allow_html=True
+            )
+else:
+    st.subheader("Nenhuma sheet selecionada para exibir")
+
+
+
+
+
+
+
+
 
 
 
