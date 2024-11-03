@@ -7,15 +7,18 @@ st.markdown(
     """
     <style>
     h1 {
-        color: #ffffff;
+        color: #B35C37;
         text-align: center;
     }
-    h2, h3, h4, h5, h6 {
-        color: #ffffff;
+    h3, h4, h5, h6 {
+        color: #B35C37;
     }
     .stSidebar {
-        background-color: #1a1a1a;
+        background-color: #4B3D29;
     }
+    .stMain {
+        background-color: #FFFFFF; 
+    } 
     </style>
     """,
     unsafe_allow_html=True
@@ -71,53 +74,100 @@ for file_name, excel_file in excel_files.items():
     dataframes[file_name] = {}
     for sheet_name in excel_file.sheet_names:
         df = excel_file.parse(sheet_name)
-        # Converter a coluna 'Ano' para string, se existir
+        df = df.applymap(lambda x: x.replace('\n', '').replace('\t', '') if isinstance(x, str) else x)
         if 'Ano' in df.columns:
             df['Ano'] = df['Ano'].astype(str)
         dataframes[file_name][sheet_name] = df
 
 # Criar os filtros na barra lateral
 with st.sidebar:
-    nomes_selecionados = st.multiselect("Selecione o(s) Nome(s) para filtrar", options=nomes_para_filtrar)
+    # Filtro de nomes
+    nomes_disponiveis = set()
+    for arquivo in excel_files.keys():
+        for sheet, df in dataframes[arquivo].items():
+            nomes_disponiveis.update(df['Nome Completo'].unique())
 
-    arquivos_disponiveis = ["Todos"] + list(excel_files.keys())
+    nomes_disponiveis = sorted(list(nomes_disponiveis))
+    nomes_disponiveis = ["Todos"] + nomes_disponiveis
+    nomes_selecionados = st.multiselect(
+        "Selecione o(s) Nome(s) para filtrar", 
+        options=nomes_disponiveis
+    )
+
+    # Se nenhum nome for selecionado, considera como "Todos"
+    if not nomes_selecionados or "Todos" in nomes_selecionados:
+        nomes_selecionados = list(nomes_disponiveis[1:])
+
+    # Filtrar dataframes por nomes para obter anos disponíveis
+    anos_disponiveis = set()
+    for arquivo in excel_files.keys():
+        for sheet, df in dataframes[arquivo].items():
+            if "Todos" not in nomes_selecionados:
+                df = df[df['Nome Completo'].isin(nomes_selecionados)]
+            anos_disponiveis.update(df['Ano'].unique())
+
+    anos_disponiveis = sorted(list(anos_disponiveis))
+    anos_disponiveis = ["Todos"] + anos_disponiveis
+    anos_selecionados = st.multiselect(
+        "Selecione o(s) Ano(s) para filtrar", 
+        options=anos_disponiveis
+    )
+
+    # Se nenhum ano for selecionado, considera como "Todos"
+    if not anos_selecionados or "Todos" in anos_selecionados:
+        anos_selecionados = list(anos_disponiveis[1:])
+
+    # Filtrar dataframes por nomes e anos para obter arquivos disponíveis
+    arquivos_disponiveis = set()
+    for arquivo in excel_files.keys():
+        incluir_arquivo = False
+        for sheet, df in dataframes[arquivo].items():
+            if "Todos" not in nomes_selecionados:
+                df = df[df['Nome Completo'].isin(nomes_selecionados)]
+            if "Todos" not in anos_selecionados:
+                df = df[df['Ano'].isin(anos_selecionados)]
+            if not df.empty:
+                incluir_arquivo = True
+        if incluir_arquivo:
+            arquivos_disponiveis.add(arquivo)
+
+    arquivos_disponiveis = sorted(list(arquivos_disponiveis))
     arquivos_selecionados = st.multiselect(
-        "Selecione o(s) Arquivo(s) para filtrar",
+        "Selecione a(s) Produção(s) para filtrar", 
         options=arquivos_disponiveis
     )
 
     # Se nenhum arquivo for selecionado, considera como "Todos"
-    if not arquivos_selecionados or "Todos" in arquivos_selecionados:
-        arquivos_selecionados = list(excel_files.keys())
+    #if not arquivos_selecionados or "Todos" in arquivos_selecionados:
+    #    arquivos_selecionados = list(arquivos_disponiveis[1:])
 
-    sheets_disponiveis = []
+    # Filtrar dataframes por nomes, anos e arquivos para obter as sheets disponíveis
+    sheets_disponiveis = set()
     for arquivo in arquivos_selecionados:
-        sheets_disponiveis.extend(dataframes[arquivo].keys())
+        for sheet, df in dataframes[arquivo].items():
+            if "Todos" not in nomes_selecionados:
+                df = df[df['Nome Completo'].isin(nomes_selecionados)]
+            if "Todos" not in anos_selecionados:
+                df = df[df['Ano'].isin(anos_selecionados)]
+            if not df.empty:
+                sheets_disponiveis.add(sheet)
 
-    sheets_disponiveis = ["Todos"] + list(set(sheets_disponiveis))  # Remover duplicatas
-
+    sheets_disponiveis = ["Todos"] + sorted(list(sheets_disponiveis))
     sheets_selecionadas = st.multiselect(
-        "Selecione a(s) Sheets para filtrar", 
+        "Selecione o(s) Trabalho(s) para filtrar", 
         options=sheets_disponiveis
     )
 
     # Se nenhuma sheet for selecionada, considera como "Todos"
     if not sheets_selecionadas or "Todos" in sheets_selecionadas:
-        sheets_selecionadas = list(set(sheets_disponiveis[1:]))
-    
-    anos_selecionados = st.multiselect(
-        "Selecione os anos para filtrar", 
-        options=anos_para_filtrar
-    )
+        sheets_selecionadas = list(sheets_disponiveis[1:])
 
 st.subheader("Distribuição por Categoria: ")
 
 # Função para contar as linhas de acordo com os filtros de forma dinâmica
 def contar_linhas(df, nomes_selecionados, anos_selecionados):
-    # Aplicar filtro de nomes apenas se não for vazio
     if nomes_selecionados:
         df = df[df['Nome Completo'].isin(nomes_selecionados)]
-    # Aplicar filtro de anos apenas se não for vazio
     if anos_selecionados:
         df = df[df['Ano'].isin(anos_selecionados)]
     return len(df)
@@ -125,7 +175,7 @@ def contar_linhas(df, nomes_selecionados, anos_selecionados):
 # Inicializar dicionário para contagens e definir arquivos e sheets a contar
 arquivos_para_contar = list(excel_files.keys()) if "Todos" in arquivos_selecionados or not arquivos_selecionados else arquivos_selecionados
 sheets_para_contar = None if "Todos" in sheets_selecionadas or not sheets_selecionadas else sheets_selecionadas
-cores = ['#FF5733', '#33FF57', '#3357FF'] 
+cores = ['#EDD19C', '#B35C37', '#88540B', '#6B8E23', '#25395D', '#8B0000']
 
 contagens = {}
 total_contagens = 0  # Para armazenar o total geral
@@ -148,11 +198,24 @@ fig = px.pie(
     values=list(contagens.values()),
     color_discrete_sequence=cores
 )
+fig.update_layout(
+    legend=dict(
+        font=dict(
+            size=20,         # Tamanho da fonte da legenda
+            color='#B35C37' 
+        )
+    ),
+    plot_bgcolor='#F5F5DC',  # Cor de fundo do espaço do gráfico
+    paper_bgcolor='#FFFFFF' 
+)
+
+fig.update_traces(textfont=dict(color='black', size=14, family='Arial', weight='bold'))  
+
 st.plotly_chart(fig)
 
 # Exibir o total de linhas no centro do layout
 st.markdown(
-    f"<h2 style='text-align: center; color: white;'>O Total é: {total_contagens}</h2>",
+    f"<h2 style='text-align: center; color: #B35C37;'>Total de Produções Acadêmicas: {total_contagens}</h2>",
     unsafe_allow_html=True
 )
 
@@ -200,20 +263,116 @@ for arquivo, sheets in dataframes.items():
 
 
 
-# Gráfico de barras atualizado com todos os filtros
 fig_bar = px.bar(
     x=list(contagens_por_ano.keys()),
     y=list(contagens_por_ano.values())
 )
 
-# Define o eixo x como categórico
-fig_bar.update_xaxes(type='category')
+# Atualizando as cores e estilos
+fig_bar.update_traces(marker_color='#B35C37')  # Cor das barras
+fig_bar.update_traces(text=list(contagens_por_ano.values()), textposition='outside')  # Rótulos de dados
 
-# Adiciona os rótulos de dados nas barras
-fig_bar.update_traces(text=list(contagens_por_ano.values()), textposition='outside')
+# Definindo o eixo x como categórico e estilizando
+fig_bar.update_xaxes(
+    type='category',
+    title_font=dict(color='black', size=16, family='Arial', weight='bold'),  # Título do eixo X
+    tickfont=dict(color='black', size=14, family='Arial', weight='bold')  # Fonte dos ticks do eixo X
+)
+
+fig_bar.update_yaxes(
+    title_font=dict(color='black', size=16, family='Arial', weight='bold'),  # Título do eixo Y
+    tickfont=dict(color='black', size=14, family='Arial', weight='bold')  # Fonte dos ticks do eixo Y
+)
+
+# Atualizando o layout do gráfico
+fig_bar.update_layout(
+    plot_bgcolor='#FFFFFF',  # Cor de fundo do gráfico
+    paper_bgcolor='#FFFFFF',  # Cor de fundo da área ao redor do gráfico
+    font=dict(color='black', family='Arial')  # Cor do texto geral no gráfico
+)
 
 # Exibir o gráfico no Streamlit
 st.plotly_chart(fig_bar)
+
+# Verificar se "Orientações" foi selecionado para exibir os gráficos de pizza
+def exibir_graficos_orientacoes():
+    andamento_contagens = {}
+    concluida_contagens = {}
+    total_andamento = 0
+    total_concluida = 0
+
+    # Definir cores fixas para cada categoria
+    cores = ['#EDD19C', '#B35C37', '#88540B', '#6B8E23', '#25395D', '#8B0000']
+    categorias = ["Categoria1", "Categoria2", "Categoria3", "Categoria4", "Categoria5", "Categoria6"]
+    color_map = {categoria: cor for categoria, cor in zip(categorias, cores)}
+
+    # Contar "Andamento" e "Concluída" em cada sheet
+    for sheet, df in dataframes["Orientações"].items():
+        if "andamento" in sheet.lower():
+            andamento_contagens[sheet] = contar_linhas(df, nomes_selecionados, anos_selecionados)
+            total_andamento += andamento_contagens[sheet]
+        elif "concluida" in sheet.lower():
+            concluida_contagens[sheet] = contar_linhas(df, nomes_selecionados, anos_selecionados)
+            total_concluida += concluida_contagens[sheet]
+
+    # Gráfico de pizza para "Andamento"
+    fig_andamento = px.pie(
+        names=list(andamento_contagens.keys()), 
+        values=list(andamento_contagens.values()),
+        color=list(andamento_contagens.keys()),  # Definindo cores com base nas chaves
+        color_discrete_map=color_map,
+        title="Orientações em Andamento"
+    )
+    
+    # Aplicando layout e estilos ao gráfico de pizza "Em Andamento"
+    fig_andamento.update_layout(
+        legend=dict(
+            font=dict(
+                size=20,         # Tamanho da fonte da legenda
+                color='#B35C37'  # Cor da fonte da legenda
+            )
+        ),
+        plot_bgcolor='#F5F5DC',  # Cor de fundo do espaço do gráfico
+        paper_bgcolor='#FFFFFF'   # Cor de fundo da área ao redor do gráfico
+    )
+
+    fig_andamento.update_traces(textfont=dict(color='black', size=14, family='Arial', weight='bold'))  # Estilo dos rótulos de dados
+
+    # Gráfico de pizza para "Concluída"
+    fig_concluida = px.pie(
+        names=list(concluida_contagens.keys()), 
+        values=list(concluida_contagens.values()),
+        color=list(concluida_contagens.keys()),  # Definindo cores com base nas chaves
+        color_discrete_map=color_map,
+        title="Orientações Concluídas"
+    )
+
+    # Aplicando layout e estilos ao gráfico de pizza "Concluída"
+    fig_concluida.update_layout(
+        legend=dict(
+            font=dict(
+                size=20,         # Tamanho da fonte da legenda
+                color='#B35C37'  # Cor da fonte da legenda
+            )
+        ),
+        plot_bgcolor='#F5F5DC',  # Cor de fundo do espaço do gráfico
+        paper_bgcolor='#FFFFFF'   # Cor de fundo da área ao redor do gráfico
+    )
+
+    fig_concluida.update_traces(textfont=dict(color='black', size=14, family='Arial', weight='bold'))  # Estilo dos rótulos de dados
+
+    st.subheader("Distribuição de Orientações: ")
+     # Mostrar os gráficos lado a lado
+    col1, col2 = st.columns(2)
+    with col1:
+        st.plotly_chart(fig_andamento)
+    with col2:
+        st.plotly_chart(fig_concluida)
+# Verificar se "Orientações" foi selecionado para exibir os gráficos de pizza
+if "Orientações" in arquivos_selecionados:
+    exibir_graficos_orientacoes()
+#else:
+#    st.subheader("Selecione 'Orientações' no Filtro para visualizar os gráficos de andamento e concluídas.")
 
 # Exibir a tabela da primeira sheet selecionada, se houver
 if sheets_selecionadas:
@@ -230,23 +389,26 @@ if sheets_selecionadas:
 
             # Ordenar pela coluna "Ano" se ela estiver presente
             if 'Ano' in df_sheet.columns:
-                df_sheet = df_sheet.sort_values(by='Ano', ascending=True)
+                df_sheet = df_sheet.sort_values(by='Ano', ascending=False)
 
             # Exibir a tabela no Streamlit com barra de rolagem
             st.subheader(f"Tabela de Dados: {sheet_selecionada} - {arquivo}")
 
             # Gerar HTML da tabela e aplicar estilo
             tabela_html = df_sheet.to_html(index=False)  # Converte DataFrame para HTML sem índice
+            tabela_html = tabela_html.replace('<table', '<table style="border-collapse: collapse; border: 2px solid #B35C37;"')
+            tabela_html = tabela_html.replace('<th', '<th style="border: 2px solid #B35C37; color: #B35C37;"')
+            tabela_html = tabela_html.replace('<td', '<td style="border: 2px solid #B35C37;"')
             st.markdown(
                 f"""
-                <div style="overflow-x: auto;">
+                <div style="overflow-x: auto; color: #B35C37;">
                     {tabela_html}
                 </div>
                 """,
                 unsafe_allow_html=True
             )
 else:
-    st.subheader("Nenhuma sheet selecionada para exibir")
+    st.subheader("Nenhum Trabalho selecionado para exibir: ")
 
 
 
